@@ -37,7 +37,7 @@ flowchart TD
 | **Supervisor** | Explores the codebase (keyword + AST + optional semantic search) and decomposes the issue into atomic tasks. |
 | **Test Writer** | TDD-first: writes failing tests before any implementation. |
 | **Aider Worker** | Implements the feature in isolated, parallel git worktrees. |
-| **Verifier** | *Deterministic* — runs `pytest` / `npm test` / builds inside Docker, with no LLM in the loop. |
+| **Verifier** | *Deterministic* — runs applicable `pytest` / npm checks inside Docker, with no LLM in the loop. Missing prerequisites and empty test collection are recorded as skipped and block an unqualified pass. |
 | **Gatekeeper** | Senior-reviewer agent that searches the codebase to catch architecture breaks and downstream damage. |
 | **Self-Improvement** | Mines failures, rewrites prompts, routes models, and proposes durable engineering rules. |
 | **Ledger** | SQLite audit trail of every run, decision, and repair. |
@@ -96,7 +96,7 @@ The core idea: **Aider is trusted to attempt the code; GATE is trusted to decide
 
 1. The **Test Writer** drafts failing tests.
 2. **Aider** edits source to pass them.
-3. The **deterministic Verifier** runs the real test suite — no model opinions.
+3. The **deterministic Verifier** records the checks it ran and blocks the release when required checks fail or are skipped.
 4. Failures are classified and routed to prompt repair or model escalation.
 5. The **Gatekeeper** reviews the verified diff with full codebase context.
 6. Only then does GATE stage the exact files and commit a checkpoint.

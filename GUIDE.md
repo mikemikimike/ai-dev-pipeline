@@ -26,7 +26,7 @@ If a task explicitly includes test targets in its allowlist, the **Test Writer A
 The **Worker Agent** (also powered by Aider) is then unleashed. It receives the task instructions and sees the newly written failing tests in the git worktree. It implements the necessary source code changes to make the tests pass.
 
 ### C. Deterministic Verification (Verifier Engine)
-The **Verifier Engine** takes over to prove the code works. Unlike LLMs, this engine is strictly deterministic. It pipes commands over MCP to run `python -m py_compile`, `npm run build`, and natively executes `pytest` or `npm test`.
+The **Verifier Engine** takes over to check the change. Unlike LLMs, this engine is strictly deterministic. It runs applicable syntax checks over MCP and project checks in Docker, recording the commands that ran. Missing prerequisites, no applicable syntax checks, and empty pytest collection are recorded as skipped rather than passed and block the release.
 If any of these commands fail, the exact terminal output is fed back to the Worker Agent, forcing it to self-correct and retry until the tests pass.
 
 The verifier also blocks temporary scratch artifacts, checks task allowlists, and can run project-native checks inside Docker when local package metadata is available.

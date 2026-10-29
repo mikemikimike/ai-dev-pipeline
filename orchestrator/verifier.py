@@ -112,16 +112,19 @@ class VerifierEngine:
             return VerificationResult(success=False, reason=f"Changed files are missing: {', '.join(missing)}")
 
         schema_result = await self._schema_and_syntax_checks(changed_files)
-        if not schema_result.success:
+        if not schema_result.success and not schema_result.skipped:
             return schema_result
 
         project_result = await self._project_checks(changed_files)
-        if not project_result.success:
+        if not project_result.success and not project_result.skipped:
             return project_result
 
         evidence = "\n".join(
             part for part in [schema_result.evidence, project_result.evidence] if part
         )
+        skipped = [r.reason for r in (schema_result, project_result) if r.skipped]
+        if skipped:
+            return VerificationResult(success=False, skipped=True, reason="; ".join(skipped), evidence=evidence[:4000])
         return VerificationResult(success=True, reason="Deterministic verification passed.", evidence=evidence[:4000])
 
     async def verify_release(self, repo_context: str, changed_files: List[str]) -> VerificationResult:
@@ -193,22 +196,26 @@ class VerifierEngine:
                 evidence.append(result.evidence)
 
         if checked == 0:
-            return VerificationResult(success=True, reason="No source/config syntax checks were applicable.")
+            return VerificationResult(success=False, skipped=True, reason="No source/config syntax checks were applicable.")
 
         return VerificationResult(success=True, reason="Schema and syntax checks passed.", evidence="\n".join(evidence))
 
     async def _project_checks(self, changed_files: List[str]) -> VerificationResult:
         evidence = []
+        skipped = []
         package_dirs = self._package_dirs(changed_files)
 
         for package_dir in sorted(package_dirs):
             node_modules = package_dir / "node_modules"
             package_json = package_dir / "package.json"
-            if not node_modules.exists() or not package_json.exists():
-                continue
-
             scripts = self._package_scripts(package_json)
             rel_dir = self._rel(package_dir)
+
+            if not node_modules.exists():
+                for script in ("lint", "test", "build"):
+                    if script in scripts:
+                        skipped.append(f"npm run {script} not run in {rel_dir}: node_modules missing")
+                continue
 
             for script in ("lint", "test", "build"):
                 if script not in scripts:
@@ -227,16 +234,24 @@ class VerifierEngine:
         if (self.repo_root / "tests").exists() or (self.repo_root / "pytest.ini").exists():
             cmd = "pip install pytest && pytest"
             output, code = await self._run_in_docker(cmd)
-            if code not in (0, 5):
+            if code == 5:
+                skipped.append("pytest collected no tests")
+                evidence.append(f"{cmd}\n{output[:1000]}")
+            elif code != 0:
                 return VerificationResult(
                     success=False,
                     reason=f"pytest failed: {output[:800]}",
                     used_command=cmd,
                     evidence=output[:4000]
                 )
-            evidence.append(f"{cmd}\n{output[:1000]}")
+            else:
+                evidence.append(f"{cmd}\n{output[:1000]}")
+        else:
+            skipped.append("pytest not run: no tests directory or pytest.ini")
 
-        return VerificationResult(success=True, reason="Project checks passed or were not locally runnable.", evidence="\n".join(evidence))
+        if skipped:
+            return VerificationResult(success=False, skipped=True, reason="; ".join(skipped), evidence="\n".join(evidence))
+        return VerificationResult(success=True, reason="Project checks passed.", evidence="\n".join(evidence))
 
     async def _check_ts_project(self, project_dir: Path) -> VerificationResult:
         rel_dir = self._rel(project_dir)

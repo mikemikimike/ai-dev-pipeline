@@ -32,5 +32,6 @@ class GateReviewReport(BaseModel):
 class VerificationResult(BaseModel):
     success: bool
     reason: str
+    skipped: bool = False
     used_command: Optional[str] = None
     evidence: Optional[str] = None

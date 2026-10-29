@@ -321,7 +321,7 @@ class ReleaseArcOrchestrator:
                 final_result = await final_verifier.verify_release(repo_context, release_files)
                 await sandbox.disconnect()
                 await self._record_verification(db, arc_id, None, final_result, 1, release_files)
-                if not final_result.success:
+                if not final_result.success or final_result.skipped:
                     GateUI.error("Final release verification failed.", final_result.reason)
                     await self._fail_arc(db, arc_id)
                     return False
@@ -683,7 +683,7 @@ class ReleaseArcOrchestrator:
             )
             await sandbox.disconnect()
             await self._record_verification(db, arc_id, task.id, verification, attempt, changed_files)
-            if not verification.success:
+            if not verification.success or verification.skipped:
                 analysis = await self._handle_failed_attempt(
                     db=db,
                     arc_id=arc_id,
@@ -985,7 +985,7 @@ class ReleaseArcOrchestrator:
             (
                 arc_id,
                 task_id,
-                "passed" if result.success else "failed",
+                "skipped" if result.skipped else "passed" if result.success else "failed",
                 result.reason,
                 result.used_command,
                 result.evidence,
